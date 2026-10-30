@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Triage - Protocolo de Manchester</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            manchester: {
+              red: '#EF4444',
+              orange: '#F97316',
+              yellow: '#EAB308',
+              green: '#22C55E',
+              blue: '#3B82F6'
+            }
+          },
+          animation: {
+            'pulse-fast': 'pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            'glow-red': 'glowRed 1.5s ease-in-out infinite alternate',
+          },
+          keyframes: {
+            glowRed: {
+              '0%': { boxShadow: '0 0 5px rgba(239, 68, 68, 0.4)' },
+              '100%': { boxShadow: '0 0 20px rgba(239, 68, 68, 0.9)' },
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+    .badge-vermelho { background-color: #FEE2E2; color: #991B1B; border: 1px solid #F87171; }
+    .badge-laranja  { background-color: #FFEDD5; color: #9A3412; border: 1px solid #FB923C; }
+    .badge-amarelo  { background-color: #FEF9C3; color: #854D0E; border: 1px solid #FACC15; }
+    .badge-verde    { background-color: #DCFCE7; color: #166534; border: 1px solid #4ADE80; }
+    .badge-azul     { background-color: #DBEAFE; color: #1E40AF; border: 1px solid #60A5FA; }
+
+    .glow-vermelho {
+      box-shadow: 0 0 12px rgba(239, 68, 68, 0.45);
+    }
+    .glow-laranja {
+      box-shadow: 0 0 10px rgba(249, 115, 22, 0.35);
+    }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col">
+
+  <!-- Header Superior -->
+  <header class="border-b border-slate-800 bg-slate-950/80 backdrop-blur-md sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
+          <i class="fa-solid fa-heart-pulse text-white text-xl"></i>
+        </div>
+        <div>
+          <h1 class="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+            Smart Triage
+            <span class="text-xs px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800 font-mono">
+              Manchester Protocol
+            </span>
+          </h1>
+          <p class="text-xs text-slate-400">5 Pilares da Computação: ED • BD • CRUD • POO • IA</p>
+        </div>
+      </div>
+
+      <!-- Badges de Status do Sistema -->
+      <div class="hidden md:flex items-center space-x-3 text-xs">
+        <div class="flex items-center space-x-1.5 px-3 py-1 rounded-lg bg-slate-800 border border-slate-700 text-slate-300">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+          <span>Min-Heap: <b>O(log n)</b></span>
+        </div>
+        <div class="flex items-center space-x-1.5 px-3 py-1 rounded-lg bg-slate-800 border border-slate-700 text-slate-300">
+          <i class="fa-solid fa-robot text-purple-400"></i>
+          <span>Gemini AI / Fallback</span>
+        </div>
+        <div class="flex items-center space-x-1.5 px-3 py-1 rounded-lg bg-slate-800 border border-slate-700 text-slate-300">
+          <i class="fa-solid fa-database text-blue-400"></i>
+          <span>SQLite ACID</span>
+        </div>
+        <div id="relogio" class="font-mono text-slate-400 px-2"></div>
+      </div>
+    </div>
+
+    <!-- Navegação por Abas -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 border-t border-slate-800/60">
+      <nav class="flex space-x-6" aria-label="Tabs">
+        <button onclick="trocarAba('recepcao')" id="tab-btn-recepcao" class="tab-button border-b-2 border-cyan-500 text-cyan-400 py-3 text-sm font-medium flex items-center gap-2">
+          <i class="fa-solid fa-stethoscope"></i>
+          <span>1. Recepção & Triagem</span>
+        </button>
+        <button onclick="trocarAba('painel')" id="tab-btn-painel" class="tab-button border-b-2 border-transparent text-slate-400 hover:text-slate-200 py-3 text-sm font-medium flex items-center gap-2">
+          <i class="fa-solid fa-tv"></i>
+          <span>2. Painel ao Vivo</span>
+          <span id="badge-contador-total" class="ml-1 px-2 py-0.5 text-xs rounded-full bg-slate-800 text-slate-300">0</span>
+        </button>
+        <button onclick="trocarAba('consultorio')" id="tab-btn-consultorio" class="tab-button border-b-2 border-transparent text-slate-400 hover:text-slate-200 py-3 text-sm font-medium flex items-center gap-2">
+          <i class="fa-solid fa-user-doctor"></i>
+          <span>3. Consultório Médico</span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Container Principal -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full">
+
+    <!-- Toast de Notificações -->
+    <div id="toast" class="fixed bottom-6 right-6 z-50 hidden transition-all duration-300 transform translate-y-2">
+      <div id="toast-content" class="px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 text-sm font-medium border">
+        <i id="toast-icon" class="fa-solid"></i>
+        <span id="toast-msg"></span>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- ABA 1: RECEPÇÃO E TRIAGEM CLÍNICA         -->
+    <!-- ========================================== -->
+    <section id="aba-recepcao" class="tab-content block">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- Formulário de Triagem -->
+        <div class="lg:col-span-7 bg-slate-800/60 border border-slate-700/80 rounded-2xl p-6 shadow-xl backdrop-blur-sm">
+          <div class="flex items-center justify-between pb-4 border-b border-slate-700">
+            <div>
+              <h2 class="text-base font-semibold text-white flex items-center gap-2">
+                <i class="fa-solid fa-clipboard-user text-cyan-400"></i>
+                Admissão e Classificação de Risco
+              </h2>
+              <p class="text-xs text-slate-400">Preencha os dados e relate a queixa clínica para análise</p>
+            </div>
+            <span class="text-xs px-2 py-1 rounded bg-slate-700 text-slate-300">Etapa 1 / Admissão</span>
+          </div>
+
+          <form id="form-triagem" onsubmit="submeterTriagem(event)" class="mt-5 space-y-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-medium text-slate-300 mb-1">Nome Completo do Paciente *</label>
+                <input type="text" id="paciente-nome" required placeholder="Ex: Maria dos Santos"
+                  class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition">
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-300 mb-1">CPF (apenas números ou formatado) *</label>
+                <input type="text" id="paciente-cpf" required placeholder="000.000.000-00" maxlength="14"
+                  class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition">
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label class="block text-xs font-medium text-slate-300 mb-1">Idade (anos) *</label>
+                <input type="number" id="paciente-idade" required min="0" max="125" placeholder="Ex: 35"
+                  oninput="verificarPreferenciaPorIdade()"
+                  class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition">
+              </div>
+              <div class="sm:col-span-2">
+                <label class="block text-xs font-medium text-slate-300 mb-1">Atendimento Preferencial (Lei 10.048)</label>
+                <div class="flex items-center space-x-2 h-10 px-3 bg-slate-900 border border-slate-700 rounded-xl">
+                  <input type="checkbox" id="paciente-preferencial" class="w-4 h-4 text-cyan-600 rounded bg-slate-800 border-slate-600 focus:ring-cyan-500">
+                  <label for="paciente-preferencial" class="text-xs text-slate-300 cursor-pointer">
+                    Idoso (60+), Gestante, Lactante ou PCD
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="block text-xs font-medium text-slate-300">Queixa Clínica & Sintomas Relatados *</label>
+                <span class="text-xs text-cyan-400 cursor-pointer hover:underline" onclick="usarExemploClinico()">
+                  <i class="fa-solid fa-wand-magic-sparkles"></i> Testar exemplo
+                </span>
+              </div>
+              <textarea id="paciente-sintomas" required rows="3" placeholder="Descreva os sintomas com clareza. Ex: 'Dor aguda no peito irradiando para o braço esquerdo, sudorese fria e falta de ar iniciada há 20 minutos.'"
+                class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition"></textarea>
+            </div>
+
+            <!-- Botões de Ação -->
+            <div class="flex flex-col sm:flex-row gap-3 pt-2">
+              <button type="button" onclick="analisarComIA()" id="btn-analisar-ia"
+                class="flex-1 px-4 py-2.5 rounded-xl bg-purple-600/30 hover:bg-purple-600/40 text-purple-300 border border-purple-500/50 font-medium text-sm flex items-center justify-center gap-2 transition duration-200">
+                <i class="fa-solid fa-sparkles text-purple-400"></i>
+                <span id="btn-analisar-texto">Analisar com IA (Gemini)</span>
+                <i id="btn-analisar-spinner" class="fa-solid fa-circle-notch fa-spin hidden"></i>
+              </button>
+
+              <button type="submit" id="btn-submeter-triagem"
+                class="flex-1 px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-medium text-sm flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/20 transition duration-200">
+                <i class="fa-solid fa-hospital-user"></i>
+                <span>Confirmar e Inserir na Fila</span>
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Painel Lateral: Prévia da Análise da IA -->
+        <div class="lg:col-span-5 space-y-4">
+          <div class="bg-slate-800/60 border border-slate-700/80 rounded-2xl p-6 shadow-xl backdrop-blur-sm">
+            <h3 class="text-sm font-semibold text-white flex items-center gap-2 pb-3 border-b border-slate-700">
+              <i class="fa-solid fa-brain text-purple-400"></i>
+              Diagnóstico do Manchester por IA
+            </h3>
+
+            <!-- Card de Resultado da IA -->
+            <div id="ia-preview-vazio" class="py-8 text-center text-slate-500 space-y-2">
+              <i class="fa-solid fa-stethoscope text-3xl text-slate-600"></i>
+              <p class="text-xs">Digite os sintomas ou clique em "Analisar com IA" para pré-visualizar a classificação.</p>
+            </div>
+
+            <div id="ia-preview-resultado" class="hidden mt-4 space-y-4">
+              <!-- Badge da Cor do Manchester -->
+              <div id="preview-badge-cor" class="p-4 rounded-xl border flex items-center justify-between">
+                <div>
+                  <span id="preview-nome-cor" class="text-xs uppercase font-extrabold tracking-wider"></span>
+                  <h4 id="preview-titulo-gravidade" class="text-base font-bold text-white"></h4>
+                </div>
+                <div class="text-right">
+                  <span class="text-xs text-slate-400 block">Tempo Alvo</span>
+                  <span id="preview-tempo-alvo" class="text-lg font-mono font-bold"></span>
+                </div>
+              </div>
+
+              <!-- Justificativa da IA -->
+              <div class="bg-slate-900/80 p-3.5 rounded-xl border border-slate-700/60 text-xs text-slate-300">
+                <div class="text-slate-400 font-semibold mb-1 flex items-center gap-1.5">
+                  <i class="fa-solid fa-notes-medical text-cyan-400"></i> Parecer do Modelo:
+                </div>
+                <p id="preview-justificativa" class="italic text-slate-200"></p>
+                <div class="mt-2 pt-2 border-t border-slate-800 text-[10px] text-slate-400 flex justify-between">
+                  <span>Método: <b id="preview-metodo" class="text-cyan-400"></b></span>
+                  <span>Score Heap: <b id="preview-score"></b></span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Guia Rápido do Protocolo de Manchester -->
+          <div class="bg-slate-800/40 border border-slate-700/60 rounded-2xl p-4 text-xs space-y-2">
+            <h4 class="font-semibold text-slate-300 flex items-center gap-1.5 text-xs">
+              <i class="fa-solid fa-circle-info text-cyan-400"></i> Escala de Gravidade de Manchester:
+            </h4>
+            <div class="grid grid-cols-5 gap-1.5 text-center text-[10px] font-bold">
+              <div class="p-1.5 rounded bg-red-950 text-red-300 border border-red-800">1. Vermelho<br>0 min</div>
+              <div class="p-1.5 rounded bg-orange-950 text-orange-300 border border-orange-800">2. Laranja<br>10 min</div>
+              <div class="p-1.5 rounded bg-yellow-950 text-yellow-300 border border-yellow-800">3. Amarelo<br>60 min</div>
+              <div class="p-1.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">4. Verde<br>120 min</div>
+              <div class="p-1.5 rounded bg-blue-950 text-blue-300 border border-blue-800">5. Azul<br>240 min</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+
+    <!-- ========================================== -->
+    <!-- ABA 2: PAINEL AO VIVO (SALA DE ESPERA)    -->
+    <!-- ========================================== -->
+    <section id="aba-painel" class="tab-content hidden space-y-6">
+
+      <!-- Contadores por Nível de Risco -->
+      <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <div class="bg-red-950/40 border border-red-800/60 rounded-xl p-3 flex items-center justify-between">
+          <div>
+            <span class="text-[11px] font-semibold text-red-400 uppercase tracking-wider block">Emergência</span>
+            <span class="text-xs text-red-300">Vermelho (0m)</span>
+          </div>
+          <span id="count-vermelho" class="text-2xl font-bold font-mono text-red-400">0</span>
+        </div>
+        <div class="bg-orange-950/40 border border-orange-800/60 rounded-xl p-3 flex items-center justify-between">
+          <div>
+            <span class="text-[11px] font-semibold text-orange-400 uppercase tracking-wider block">Muito Urgente</span>
+            <span class="text-xs text-orange-300">Laranja (10m)</span>
+          </div>
+          <span id="count-laranja" class="text-2xl font-bold font-mono text-orange-400">0</span>
+        </div>
+        <div class="bg-yellow-950/40 border border-yellow-800/60 rounded-xl p-3 flex items-center justify-between">
+          <div>
+            <span class="text-[11px] font-semibold text-yellow-400 uppercase tracking-wider block">Urgente</span>
+            <span class="text-xs text-yellow-300">Amarelo (60m)</span>
+          </div>
+          <span id="count-amarelo" class="text-2xl font-bold font-mono text-yellow-400">0</span>
+        </div>
+        <div class="bg-emerald-950/40 border border-emerald-800/60 rounded-xl p-3 flex items-center justify-between">
+          <div>
+            <span class="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider block">Pouco Urgente</span>
+            <span class="text-xs text-emerald-300">Verde (120m)</span>
+          </div>
+          <span id="count-verde" class="text-2xl font-bold font-mono text-emerald-400">0</span>
+        </div>
+        <div class="col-span-2 sm:col-span-1 bg-blue-950/40 border border-blue-800/60 rounded-xl p-3 flex items-center justify-between">
+          <div>
+            <span class="text-[11px] font-semibold text-blue-400 uppercase tracking-wider block">Não Urgente</span>
+            <span class="text-xs text-blue-300">Azul (240m)</span>
+          </div>
+          <span id="count-azul" class="text-2xl font-bold font-mono text-blue-400">0</span>
+        </div>
+      </div>
+
+      <!-- Fila de Prioridade Ordenada pelo Heap -->
+      <div class="bg-slate-800/60 border border-slate-700/80 rounded-2xl shadow-xl backdrop-blur-sm overflow-hidden">
+        <div class="p-5 border-b border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 class="text-base font-semibold text-white flex items-center gap-2">
+              <i class="fa-solid fa-layer-group text-cyan-400"></i>
+              Fila de Prioridade Dinâmica (Min-Heap Ativo)
+            </h2>
+            <p class="text-xs text-slate-400">Ordenação $O(\log n)$ em tempo real baseada em Gravidade > Preferencial > Chegada</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-slate-400">Atualização automática</span>
+            <button onclick="carregarFila()" class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-xs text-slate-200 transition">
+              <i class="fa-solid fa-rotate-right mr-1"></i> Atualizar agora
+            </button>
+          </div>
+        </div>
+
+        <!-- Tabela da Fila -->
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-900/70 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-700">
+              <tr>
+                <th class="py-3 px-4">Posição</th>
+                <th class="py-3 px-4">Classificação Manchester</th>
+                <th class="py-3 px-4">Paciente</th>
+                <th class="py-3 px-4">Atendimento</th>
+                <th class="py-3 px-4">Sintomas & Parecer Clínico</th>
+                <th class="py-3 px-4">Horário de Admissão</th>
+              </tr>
+            </thead>
+            <tbody id="tabela-fila-corpo" class="divide-y divide-slate-700/60 text-slate-300">
+              <!-- Preenchido via JavaScript -->
+              <tr>
+                <td colspan="6" class="py-12 text-center text-slate-500">
+                  <i class="fa-solid fa-inbox text-3xl mb-2 block"></i>
+                  Nenhum paciente aguardando atendimento na fila.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ========================================== -->
+    <!-- ABA 3: CONSULTÓRIO MÉDICO                  -->
+    <!-- ========================================== -->
+    <section id="aba-consultorio" class="tab-content hidden space-y-6">
+      
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- Card de Chamada do Próximo Paciente -->
+        <div class="lg:col-span-5 space-y-4">
+          <div class="bg-slate-800/60 border border-slate-700/80 rounded-2xl p-6 shadow-xl backdrop-blur-sm">
+            <div class="flex items-center justify-between pb-4 border-b border-slate-700">
+              <div>
+                <h2 class="text-base font-semibold text-white flex items-center gap-2">
+                  <i class="fa-solid fa-bell text-yellow-400"></i>
+                  Chamada Médica
+                </h2>
+                <p class="text-xs text-slate-400">Atenda o paciente de maior prioridade no topo do Min-Heap</p>
+              </div>
+            </div>
+
+            <!-- Botão de Chamar Próximo -->
+            <div class="pt-5 pb-3">
+              <button onclick="chamarProximoPaciente()" id="btn-chamar-proximo"
+                class="w-full py-4 px-6 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold text-base flex items-center justify-center gap-3 shadow-lg shadow-emerald-500/25 transition duration-200">
+                <i class="fa-solid fa-bullhorn text-xl"></i>
+                <span>Chamar Próximo Paciente (Topo Heap)</span>
+              </button>
+            </div>
+
+            <!-- Dados do Médico e Observação -->
+            <div class="space-y-3 pt-2">
+              <div>
+                <label class="block text-xs font-medium text-slate-300 mb-1">Médico Responsável:</label>
+                <input type="text" id="medico-nome" value="Dr(a). Luis Veras (CRM/AL)"
+                  class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500">
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-300 mb-1">Observações Clínicas / Conduta:</label>
+                <textarea id="medico-obs" rows="2" placeholder="Ex: Encaminhado para eletrocardiograma e monitorização contínua."
+                  class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500"></textarea>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card do Paciente em Atendimento Atual -->
+          <div id="card-paciente-atual" class="hidden bg-slate-800/60 border border-cyan-500/50 rounded-2xl p-6 shadow-xl backdrop-blur-sm">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-700">
+              <span class="text-xs font-bold text-cyan-400 flex items-center gap-1.5">
+                <i class="fa-solid fa-user-check"></i> Paciente em Atendimento
+              </span>
+              <span id="atual-badge-cor" class="px-2 py-0.5 rounded text-xs font-bold"></span>
+            </div>
+
+            <div class="mt-4 space-y-2 text-xs">
+              <div class="flex justify-between">
+                <span class="text-slate-400">Nome:</span>
+                <span id="atual-nome" class="font-bold text-white text-sm"></span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-slate-400">Idade / Perfil:</span>
+                <span id="atual-idade-perfil" class="text-slate-200"></span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-slate-400">CPF:</span>
+                <span id="atual-cpf" class="font-mono text-slate-300"></span>
+              </div>
+              <div class="pt-2 border-t border-slate-700">
+                <span class="text-slate-400 block mb-1">Queixa Inicial:</span>
+                <p id="atual-sintomas" class="text-slate-200 bg-slate-900/60 p-2.5 rounded-lg border border-slate-700"></p>
+              </div>
+              <div class="pt-1">
+                <span class="text-slate-400 block mb-1">Parecer da IA:</span>
+                <p id="atual-ia" class="text-cyan-300 italic bg-cyan-950/30 p-2.5 rounded-lg border border-cyan-900/50"></p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Histórico de Atendimentos Realizados -->
+        <div class="lg:col-span-7 bg-slate-800/60 border border-slate-700/80 rounded-2xl shadow-xl backdrop-blur-sm overflow-hidden">
+          <div class="p-5 border-b border-slate-700 flex items-center justify-between">
+            <div>
+              <h3 class="text-base font-semibold text-white flex items-center gap-2">
+                <i class="fa-solid fa-clock-rotate-left text-slate-400"></i>
+                Histórico de Atendimentos Concluídos
+              </h3>
+              <p class="text-xs text-slate-400">Registros persistidos no banco SQLite (Pilar BD & CRUD)</p>
+            </div>
+            <button onclick="carregarHistorico()" class="text-xs text-cyan-400 hover:underline">
+              <i class="fa-solid fa-arrow-rotate-right"></i> Atualizar
+            </button>
+          </div>
+
+          <div class="overflow-x-auto max-h-[500px]">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-slate-900/70 text-slate-400 uppercase text-[10px] tracking-wider sticky top-0 border-b border-slate-700">
+                <tr>
+                  <th class="py-3 px-4">Chamada</th>
+                  <th class="py-3 px-4">Paciente</th>
+                  <th class="py-3 px-4">Gravidade</th>
+                  <th class="py-3 px-4">Médico</th>
+                  <th class="py-3 px-4">Observações</th>
+                </tr>
+              </thead>
+              <tbody id="tabela-historico-corpo" class="divide-y divide-slate-700/60 text-slate-300">
+                <tr>
+                  <td colspan="5" class="py-8 text-center text-slate-500">
+                    Nenhum atendimento registrado ainda.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-800 bg-slate-950 py-4 text-center text-xs text-slate-500">
+    <p>Smart Triage Hospitalar • Protocolo de Manchester • Desenvolvido por Luis Henrique Veras e Equipe</p>
+  </footer>
+
+  <!-- Scripts JavaScript da Interface -->
+  <script>
+    // --- Relógio em tempo real ---
+    function atualizarRelogio() {
+      const agora = new Date();
+      document.getElementById('relogio').innerText = agora.toLocaleTimeString('pt-BR');
+    }
+    setInterval(atualizarRelogio, 1000);
+    atualizarRelogio();
+
+    // --- Controle de Abas ---
+    function trocarAba(abaId) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('.tab-button').forEach(btn => {
+        btn.classList.remove('border-cyan-500', 'text-cyan-400');
+        btn.classList.add('border-transparent', 'text-slate-400');
+      });
+
+      const abaAtiva = document.getElementById(`aba-${abaId}`);
+      const btnAtivo = document.getElementById(`tab-btn-${abaId}`);
+      if (abaAtiva && btnAtivo) {
+        abaAtiva.classList.remove('hidden');
+        btnAtivo.classList.add('border-cyan-500', 'text-cyan-400');
+        btnAtivo.classList.remove('border-transparent', 'text-slate-400');
+      }
+
+      if (abaId === 'painel') {
+        carregarFila();
+      } else if (abaId === 'consultorio') {
+        carregarHistorico();
+      }
+    }
+
+    // --- Notificações Toast ---
+    function exibirToast(mensagem, tipo = 'sucesso') {
+      const toast = document.getElementById('toast');
+      const content = document.getElementById('toast-content');
+      const icon = document.getElementById('toast-icon');
+      const msg = document.getElementById('toast-msg');
+
+      msg.innerText = mensagem;
+      toast.classList.remove('hidden', 'translate-y-2');
+
+      if (tipo === 'sucesso') {
+        content.className = 'px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 text-sm font-medium border bg-emerald-950/90 text-emerald-200 border-emerald-800';
+        icon.className = 'fa-solid fa-circle-check text-emerald-400';
+      } else if (tipo === 'alerta') {
+        content.className = 'px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 text-sm font-medium border bg-amber-950/90 text-amber-200 border-amber-800';
+        icon.className = 'fa-solid fa-triangle-exclamation text-amber-400';
+      } else {
+        content.className = 'px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 text-sm font-medium border bg-red-950/90 text-red-200 border-red-800';
+        icon.className = 'fa-solid fa-circle-xmark text-red-400';
+      }
+
+      setTimeout(() => {
+        toast.classList.add('hidden', 'translate-y-2');
+      }, 4000);
+    }
+
+    // --- Auxiliares de Formulário ---
+    function verificarPreferenciaPorIdade() {
+      const idade = parseInt(document.getElementById('paciente-idade').value, 10);
+      const prefCheckbox = document.getElementById('paciente-preferencial');
+      if (idade >= 60) {
+        prefCheckbox.checked = true;
+      }
+    }
+
+    const exemplosClinicos = [
+      {
+        nome: "Carlos Eduardo Silva",
+        cpf: "123.456.789-00",
+        idade: 62,
+        sintomas: "Dor torácica opressiva irradiando para mandíbula e braço esquerdo, acompanhada de sudorese fria e dispneia súbita há 25 minutos."
+      },
+      {
+        nome: "Ana Beatriz Ramos",
+        cpf: "987.654.321-11",
+        idade: 28,
+        sintomas: "Fratura aberta no antebraço após queda de moto, dor muito intensa e sangramento moderado ativo."
+      },
+      {
+        nome: "João Marcos Lima",
+        cpf: "456.789.123-22",
+        idade: 45,
+        sintomas: "Febre alta de 39°C há 2 dias, dor no corpo moderada, calafrios e vômitos ocasionais."
+      },
+      {
+        nome: "Lucas Pereira",
+        cpf: "321.654.987-33",
+        idade: 22,
+        sintomas: "Entorse leve no tornozelo jogando futebol ontem à noite, edema leve sem deformidade."
+      }
+    ];
+    let exemploIndex = 0;
+
+    function usarExemploClinico() {
+      const ex = exemplosClinicos[exemploIndex % exemplosClinicos.length];
+      document.getElementById('paciente-nome').value = ex.nome;
+      document.getElementById('paciente-cpf').value = ex.cpf;
+      document.getElementById('paciente-idade').value = ex.idade;
+      document.getElementById('paciente-sintomas').value = ex.sintomas;
+      verificarPreferenciaPorIdade();
+      exemploIndex++;
+      analisarComIA();
+    }
+
+    // --- 1. Chamada à IA para Prévia ---
+    async function analisarComIA() {
+      const sintomas = document.getElementById('paciente-sintomas').value;
+      const idade = parseInt(document.getElementById('paciente-idade').value, 10) || 30;
+
+      if (!sintomas.trim()) {
+        exibirToast("Preencha os sintomas para que a IA possa classificar.", "alerta");
+        return;
+      }
+
+      const spinner = document.getElementById('btn-analisar-spinner');
+      const btnTexto = document.getElementById('btn-analisar-texto');
+      spinner.classList.remove('hidden');
+      btnTexto.innerText = "Analisando com IA...";
+
+      try {
+        const resp = await fetch('/api/analisar-sintomas', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sintomas, idade })
+        });
+        const dados = await resp.json();
+
+        // Renderiza Prévia
+        renderizarPreviaIA(dados);
+        exibirToast(`Classificado como ${dados.cor} (${dados.tempo_maximo_minutos} min)`, "sucesso");
+      } catch (err) {
+        exibirToast("Erro ao conectar com o serviço de IA.", "erro");
+      } finally {
+        spinner.classList.add('hidden');
+        btnTexto.innerText = "Analisar com IA (Gemini)";
+      }
+    }
+
+    function renderizarPreviaIA(dados) {
+      document.getElementById('ia-preview-vazio').classList.add('hidden');
+      const box = document.getElementById('ia-preview-resultado');
+      box.classList.remove('hidden');
+
+      const badgeCor = document.getElementById('preview-badge-cor');
+      const nomeCor = document.getElementById('preview-nome-cor');
+      const tituloGravidade = document.getElementById('preview-titulo-gravidade');
+      const tempoAlvo = document.getElementById('preview-tempo-alvo');
+      const justificativa = document.getElementById('preview-justificativa');
+      const metodo = document.getElementById('preview-metodo');
+      const score = document.getElementById('preview-score');
+
+      nomeCor.innerText = dados.cor;
+      tempoAlvo.innerText = `${dados.tempo_maximo_minutos} min`;
+      justificativa.innerText = `"${dados.justificativa}"`;
+      metodo.innerText = dados.metodo || "Gemini / Fallback";
+      score.innerText = `${dados.score} (1=Maior Urgência)`;
+
+      // Cores do Badge
+      const classesCor = {
+        'VERMELHO': { bg: 'badge-vermelho glow-vermelho', tit: 'Emergência (Imediato)' },
+        'LARANJA':  { bg: 'badge-laranja glow-laranja', tit: 'Muito Urgente (Até 10 min)' },
+        'AMARELO':  { bg: 'badge-amarelo', tit: 'Urgente (Até 60 min)' },
+        'VERDE':    { bg: 'badge-verde', tit: 'Pouco Urgente (Até 120 min)' },
+        'AZUL':     { bg: 'badge-azul', tit: 'Não Urgente (Até 240 min)' }
+      };
+
+      const estilo = classesCor[dados.cor] || classesCor['AZUL'];
+      badgeCor.className = `p-4 rounded-xl border flex items-center justify-between ${estilo.bg}`;
+      tituloGravidade.innerText = estilo.tit;
+    }
+
+    // --- 2. Submeter Triagem (Inserção no Heap e Banco) ---
+    async function submeterTriagem(e) {
+      e.preventDefault();
+      const nome = document.getElementById('paciente-nome').value.trim();
+      const cpf = document.getElementById('paciente-cpf').value.trim();
+      const idade = parseInt(document.getElementById('paciente-idade').value, 10);
+      const eh_preferencial = document.getElementById('paciente-preferencial').checked;
+      const sintomas = document.getElementById('paciente-sintomas').value.trim();
+
+      try {
+        const resp = await fetch('/api/triagem', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            nome,
+            cpf,
+            idade,
+            eh_preferencial,
+            sintomas
+          })
+        });
+
+        if (!resp.ok) {
+          const errData = await resp.json();
+          throw new Error(errData.detail || "Erro ao salvar triagem.");
+        }
+
+        const resData = await resp.json();
+        exibirToast(`Paciente ${nome} inserido com sucesso na fila (Min-Heap)!`, "sucesso");
+
+        // Limpa formulário
+        document.getElementById('form-triagem').reset();
+        document.getElementById('ia-preview-resultado').classList.add('hidden');
+        document.getElementById('ia-preview-vazio').classList.remove('hidden');
+
+        // Atualiza a fila
+        carregarFila();
+      } catch (err) {
+        exibirToast(err.message, "erro");
+      }
+    }
+
+    // --- 3. Carregar e Renderizar a Fila de Espera ---
+    async function carregarFila() {
+      try {
+        const resp = await fetch('/api/fila');
+        const data = await resp.json();
+
+        // Atualiza contadores
+        document.getElementById('badge-contador-total').innerText = data.total;
+        document.getElementById('count-vermelho').innerText = data.distribuicao.VERMELHO || 0;
+        document.getElementById('count-laranja').innerText = data.distribuicao.LARANJA || 0;
+        document.getElementById('count-amarelo').innerText = data.distribuicao.AMARELO || 0;
+        document.getElementById('count-verde').innerText = data.distribuicao.VERDE || 0;
+        document.getElementById('count-azul').innerText = data.distribuicao.AZUL || 0;
+
+        const tbody = document.getElementById('tabela-fila-corpo');
+        if (!data.fila || data.fila.length === 0) {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="6" class="py-12 text-center text-slate-500">
+                <i class="fa-solid fa-inbox text-3xl mb-2 block"></i>
+                Nenhum paciente aguardando atendimento na fila.
+              </td>
+            </tr>
+          `;
+          return;
+        }
+
+        const badgesEstilo = {
+          'Vermelho': 'bg-red-950 text-red-300 border-red-700 animate-pulse-fast',
+          'Laranja':  'bg-orange-950 text-orange-300 border-orange-700',
+          'Amarelo':  'bg-yellow-950 text-yellow-300 border-yellow-700',
+          'Verde':    'bg-emerald-950 text-emerald-300 border-emerald-700',
+          'Azul':     'bg-blue-950 text-blue-300 border-blue-700'
+        };
+
+        tbody.innerHTML = data.fila.map((p, idx) => {
+          const badgeClass = badgesEstilo[p.cor] || 'bg-slate-800 text-slate-300 border-slate-700';
+          const posTexto = idx === 0 
+            ? `<span class="px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-700 font-bold">1º (Topo Raiz)</span>`
+            : `<span class="font-mono text-slate-400">${idx + 1}º</span>`;
+
+          const prefBadge = p.eh_preferencial 
+            ? `<span class="px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800 text-[10px] font-semibold"><i class="fa-solid fa-star text-xs mr-1"></i>Preferencial</span>` 
+            : `<span class="text-slate-400 text-[11px]">Geral</span>`;
+
+          return `
+            <tr class="hover:bg-slate-800/40 transition ${idx === 0 ? 'bg-cyan-950/10' : ''}">
+              <td class="py-3 px-4 font-medium">${posTexto}</td>
+              <td class="py-3 px-4">
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-bold ${badgeClass}">
+                  <span class="w-2 h-2 rounded-full ${p.cor === 'Vermelho' ? 'bg-red-400 animate-ping' : 'bg-current'}"></span>
+                  ${p.cor} (${p.tempo_maximo_minutos}m)
+                </span>
+              </td>
+              <td class="py-3 px-4">
+                <div class="font-semibold text-white">${p.nome}</div>
+                <div class="text-[11px] text-slate-400">Idade: ${p.idade} anos • CPF: ${p.cpf}</div>
+              </td>
+              <td class="py-3 px-4">${prefBadge}</td>
+              <td class="py-3 px-4 max-w-xs">
+                <p class="truncate font-medium text-slate-200" title="${p.sintomas}">${p.sintomas}</p>
+                <p class="truncate text-[11px] text-slate-400 italic" title="${p.justificativa_ia}">${p.justificativa_ia}</p>
+              </td>
+              <td class="py-3 px-4 font-mono text-slate-400">${p.horario_chegada}</td>
+            </tr>
+          `;
+        }).join('');
+
+      } catch (err) {
+        console.error("Erro ao carregar fila:", err);
+      }
+    }
+
+    // --- 4. Chamar Próximo Paciente no Consultório ---
+    async function chamarProximoPaciente() {
+      const medico = document.getElementById('medico-nome').value.trim() || "Dr(a). Plantonista";
+      const obs = document.getElementById('medico-obs').value.trim();
+
+      const formData = new FormData();
+      formData.append("medico_responsavel", medico);
+      formData.append("observacoes", obs);
+
+      try {
+        const resp = await fetch('/api/chamar-proximo', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!resp.ok) {
+          const errData = await resp.json();
+          throw new Error(errData.detail || "Erro ao chamar paciente.");
+        }
+
+        const data = await resp.json();
+        const paciente = data.paciente_chamado;
+
+        exibirToast(`Chamando: ${paciente.nome} (${paciente.cor})!`, "sucesso");
+
+        // Exibe o card de paciente atual
+        const cardAtual = document.getElementById('card-paciente-atual');
+        cardAtual.classList.remove('hidden');
+
+        document.getElementById('atual-nome').innerText = paciente.nome;
+        document.getElementById('atual-idade-perfil').innerText = `${paciente.idade} anos (${paciente.tipo_atendimento})`;
+        document.getElementById('atual-cpf').innerText = paciente.cpf;
+        document.getElementById('atual-sintomas').innerText = paciente.sintomas;
+        document.getElementById('atual-ia').innerText = `"${paciente.justificativa_ia}"`;
+
+        const badgeCor = document.getElementById('atual-badge-cor');
+        badgeCor.innerText = `${paciente.cor.toUpperCase()} (${paciente.tempo_maximo_minutos} min)`;
+        badgeCor.className = `px-2 py-0.5 rounded text-xs font-bold ${
+          paciente.cor === 'Vermelho' ? 'badge-vermelho glow-vermelho' :
+          paciente.cor === 'Laranja' ? 'badge-laranja' :
+          paciente.cor === 'Amarelo' ? 'badge-amarelo' :
+          paciente.cor === 'Verde' ? 'badge-verde' : 'badge-azul'
+        }`;
+
+        // Limpa campo de observação
+        document.getElementById('medico-obs').value = "";
+
+        // Atualiza fila e histórico
+        carregarFila();
+        carregarHistorico();
+      } catch (err) {
+        exibirToast(err.message, "alerta");
+      }
+    }
+
+    // --- 5. Carregar Histórico de Atendimentos ---
+    async function carregarHistorico() {
+      try {
+        const resp = await fetch('/api/historico');
+        const data = await resp.json();
+        const tbody = document.getElementById('tabela-historico-corpo');
+
+        if (!data.historico || data.historico.length === 0) {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="5" class="py-8 text-center text-slate-500">
+                Nenhum atendimento registrado ainda.
+              </td>
+            </tr>
+          `;
+          return;
+        }
+
+        tbody.innerHTML = data.historico.map(item => `
+          <tr class="hover:bg-slate-800/40 transition">
+            <td class="py-3 px-4 font-mono text-slate-400">${item.data_hora_chamada.split(' ')[1] || item.data_hora_chamada}</td>
+            <td class="py-3 px-4">
+              <div class="font-semibold text-white">${item.paciente_nome}</div>
+              <div class="text-[11px] text-slate-400">${item.paciente_idade} anos • ${item.eh_preferencial ? 'Preferencial' : 'Geral'}</div>
+            </td>
+            <td class="py-3 px-4 font-bold text-${item.cor_manchester.toLowerCase()}-400">
+              ${item.cor_manchester}
+            </td>
+            <td class="py-3 px-4 text-slate-300">${item.medico_responsavel}</td>
+            <td class="py-3 px-4 text-slate-400 italic">${item.observacoes || 'Sem observações'}</td>
+          </tr>
+        `).join('');
+
+      } catch (err) {
+        console.error("Erro ao carregar histórico:", err);
+      }
+    }
+
+    // Inicialização da Fila e Polling Automático a cada 4 segundos
+    carregarFila();
+    setInterval(() => {
+      // Atualiza automaticamente apenas se estiver na aba do painel
+      const painelVisivel = !document.getElementById('aba-painel').classList.contains('hidden');
+      if (painelVisivel) {
+        carregarFila();
+      }
+    }, 4000);
+  </script>
+</body>
+</html>
