@@ -1,7 +1,6 @@
-from datetime import datetime
-from typing import List, Optional, Tuple, Any
+from typing import List, Optional, Tuple
 from app.models.paciente import Paciente
-from app.models.triagem import Triagem, GrauRisco
+from app.models.triagem import Triagem
 
 
 class ItemFila:
@@ -114,14 +113,14 @@ class PriorityQueue:
         tamanho = len(self._heap)
         while True:
             menor = indice
-            esq = self._filho_esquerdo(indice)
-            dir = self._filho_direito(indice)
+            esquerdo = self._filho_esquerdo(indice)
+            direito = self._filho_direito(indice)
 
-            if esq < tamanho and self._heap[esq] < self._heap[menor]:
-                menor = esq
+            if esquerdo < tamanho and self._heap[esquerdo] < self._heap[menor]:
+                menor = esquerdo
 
-            if dir < tamanho and self._heap[dir] < self._heap[menor]:
-                menor = dir
+            if direito < tamanho and self._heap[direito] < self._heap[menor]:
+                menor = direito
 
             if menor != indice:
                 self._trocar(indice, menor)
