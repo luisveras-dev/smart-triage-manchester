@@ -1,10 +1,14 @@
 import pytest
+import random
 from datetime import datetime, timedelta
 from app.models.paciente import Paciente, PacientePreferencial
 from app.models.triagem import Triagem, GrauRisco
 from app.core.priority_queue import PriorityQueue, ItemFila
 
 
+# ======================================================================
+# Testes de integração com o modelo (pacientes reais)
+# ======================================================================
 def test_min_heap_ordenacao_gravidade():
     """
     Testa se o Min-Heap retira na ordem correta de Manchester:
@@ -69,3 +73,154 @@ def test_desempate_paciente_preferencial():
     primeiro = heap.remover_mais_urgente()
     assert primeiro.paciente.eh_preferencial is True
     assert primeiro.paciente.nome == "Idoso Preferencial"
+
+
+# ======================================================================
+# Testes da estrutura (fila isolada, com paciente de mentira)
+# O paciente falso só tem o que a fila consome: nome e peso de desempate.
+# ======================================================================
+BASE = datetime(2026, 10, 31, 8, 0, 0)
+
+
+class PacienteFalso:
+    """Paciente de mentira: nome e peso de desempate (0 = preferencial, 1 = comum)."""
+
+    def __init__(self, nome: str, preferencial: bool = False):
+        self.nome = nome
+        self._preferencial = preferencial
+
+    def peso_prioridade_desempate(self) -> int:
+        return 0 if self._preferencial else 1
+
+
+def criar(
+    nome: str, grau: GrauRisco, preferencial: bool = False, minuto: int = 0
+) -> ItemFila:
+    """Cria um item da fila cujo paciente chegou ``minuto`` minutos após a base."""
+    triagem = Triagem("sintomas", grau, criado_em=BASE + timedelta(minutes=minuto))
+    return ItemFila(PacienteFalso(nome, preferencial), triagem)
+
+
+def esvaziar(fila: PriorityQueue) -> list[str]:
+    """Remove tudo e devolve os nomes na ordem de saída."""
+    nomes = []
+    while not fila.esta_vazia():
+        nomes.append(fila.remover_mais_urgente().paciente.nome)
+    return nomes
+
+
+# ---------- Estado básico ----------
+def test_fila_nova_esta_vazia():
+    fila = PriorityQueue()
+    assert fila.esta_vazia()
+    assert fila.tamanho() == 0
+
+
+def test_fila_vazia_devolve_none():
+    fila = PriorityQueue()
+    assert fila.obter_primeiro() is None
+    assert fila.remover_mais_urgente() is None
+
+
+def test_tamanho_acompanha_insercoes_e_remocoes():
+    fila = PriorityQueue()
+    fila.inserir(criar("a", GrauRisco.LARANJA))
+    fila.inserir(criar("b", GrauRisco.VERMELHO))
+    assert fila.tamanho() == 2
+    fila.remover_mais_urgente()
+    assert fila.tamanho() == 1
+    fila.remover_mais_urgente()
+    assert fila.esta_vazia()
+
+
+def test_remover_o_unico_elemento_esvazia_a_fila():
+    fila = PriorityQueue()
+    fila.inserir(criar("unico", GrauRisco.AZUL))
+    assert fila.remover_mais_urgente().paciente.nome == "unico"
+    assert fila.esta_vazia()
+
+
+# ---------- Ordem de atendimento ----------
+def test_prioridade_chave_segue_os_tres_criterios():
+    item = criar("Bia", GrauRisco.AMARELO, preferencial=True, minuto=3)
+    esperado = (
+        GrauRisco.AMARELO.score,
+        0,
+        (BASE + timedelta(minutes=3)).timestamp(),
+    )
+    assert item.prioridade_chave == esperado
+
+
+def test_exemplo_da_explicacao():
+    fila = PriorityQueue()
+    fila.inserir(criar("Ana", GrauRisco.VERDE, minuto=1))
+    fila.inserir(criar("Bia", GrauRisco.AMARELO, minuto=2))
+    fila.inserir(criar("Caio", GrauRisco.VERMELHO, minuto=3))
+    fila.inserir(criar("Davi", GrauRisco.AMARELO, minuto=4))
+    assert esvaziar(fila) == ["Caio", "Bia", "Davi", "Ana"]
+
+
+def test_desempate_final_e_ordem_de_chegada():
+    fila = PriorityQueue()
+    fila.inserir(criar("segundo", GrauRisco.AMARELO, minuto=10))
+    fila.inserir(criar("primeiro", GrauRisco.AMARELO, minuto=2))
+    fila.inserir(criar("terceiro", GrauRisco.AMARELO, minuto=30))
+    assert esvaziar(fila) == ["primeiro", "segundo", "terceiro"]
+
+
+def test_gravidade_vence_preferencial():
+    fila = PriorityQueue()
+    fila.inserir(criar("idoso azul", GrauRisco.AZUL, preferencial=True, minuto=0))
+    fila.inserir(criar("jovem vermelho", GrauRisco.VERMELHO, minuto=9))
+    assert esvaziar(fila) == ["jovem vermelho", "idoso azul"]
+
+
+# ---------- Consultas que não alteram a fila ----------
+def test_obter_primeiro_nao_remove():
+    fila = PriorityQueue()
+    fila.inserir(criar("verde", GrauRisco.VERDE))
+    fila.inserir(criar("vermelho", GrauRisco.VERMELHO))
+    assert fila.obter_primeiro().paciente.nome == "vermelho"
+    assert fila.tamanho() == 2
+
+
+def test_listar_elementos_ordenado_e_sem_alterar_a_fila():
+    fila = PriorityQueue()
+    fila.inserir(criar("verde", GrauRisco.VERDE, minuto=0))
+    fila.inserir(criar("vermelho", GrauRisco.VERMELHO, minuto=1))
+    fila.inserir(criar("amarelo", GrauRisco.AMARELO, minuto=2))
+    listados = [item.paciente.nome for item in fila.listar_elementos()]
+    assert listados == ["vermelho", "amarelo", "verde"]
+    assert fila.tamanho() == 3
+    assert esvaziar(fila) == listados
+
+
+# ---------- Propriedades do heap ----------
+def test_propriedade_do_heap_vale_apos_muitas_operacoes():
+    sorteio = random.Random(42)
+    graus = list(GrauRisco)
+    fila = PriorityQueue()
+    for i in range(200):
+        fila.inserir(criar(f"p{i}", sorteio.choice(graus), sorteio.random() < 0.3, i))
+        if i % 7 == 0:
+            fila.remover_mais_urgente()
+        # Todo pai deve ser menor ou igual aos seus filhos.
+        heap = fila._heap
+        for pos in range(1, len(heap)):
+            assert heap[(pos - 1) // 2] <= heap[pos]
+
+
+def test_ordem_de_saida_bate_com_ordenacao_normal():
+    sorteio = random.Random(7)
+    graus = list(GrauRisco)
+    # Cada paciente chega em um minuto diferente, então não há empate total.
+    itens = [
+        criar(f"p{i}", sorteio.choice(graus), sorteio.random() < 0.3, i)
+        for i in range(300)
+    ]
+    fila = PriorityQueue()
+    for item in itens:
+        fila.inserir(item)
+    esperado = [item.paciente.nome for item in sorted(itens, key=lambda x: x.prioridade_chave)]
+    saida = [fila.remover_mais_urgente().paciente.nome for _ in itens]
+    assert saida == esperado
