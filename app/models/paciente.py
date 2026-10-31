@@ -1,6 +1,6 @@
 from datetime import datetime
-from typing import Optional
-
+from typing import Optional, Tuple
+from app.models.triagem import Triagem
 
 class Paciente:
     """
@@ -16,9 +16,9 @@ class Paciente:
         criado_em: Optional[datetime] = None
     ):
         self._id = paciente_id
-        self._nome = nome.strip()
+        self.nome = nome
         self._cpf = "".join(filter(str.isalnum, cpf))
-        self._idade = int(idade)
+        self.idade = int(idade)
         self._eh_preferencial = False
         self._criado_em = criado_em or datetime.now()
 
@@ -68,6 +68,16 @@ class Paciente:
         Pacientes comuns possuem peso padrão de desempate = 1 (menor preferência).
         """
         return 1
+
+    def calcular_score_final(self, triagem: Triagem) -> Tuple[int, int, float]:
+        """
+        Método Polimórfico (Polimorfismo em tempo de execução).
+        Devolve a chave de ordenação da fila (menor = atendido primeiro):
+          1º: score de Manchester da triagem
+          2º: peso de desempate, que depende do TIPO do paciente
+          3º: horário de chegada (FIFO)
+        """
+        return (triagem.grau_risco.score, self.peso_prioridade_desempate(), triagem.criado_em.timestamp())
 
     def tipo_atendimento(self) -> str:
         return "Geral"
