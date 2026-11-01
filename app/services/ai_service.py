@@ -60,8 +60,15 @@ class AIService:
     """
 
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
-        self.api_key = api_key or os.environ.get("GEMINI_API_KEY", "")
-        self.model = model or os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+        if api_key is not None:
+            self.api_key = api_key
+        else:
+            self.api_key = os.environ.get("GEMINI_API_KEY", "")
+
+        if model is not None:
+            self.model = model
+        else:
+            self.model = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash")
         self.client = None
 
         if self.api_key:
@@ -160,7 +167,9 @@ Analise o quadro acima e determine a classificação estrita no Protocolo de Man
         if tempo != specs["tempo_maximo_minutos"]:
             tempo = specs["tempo_maximo_minutos"]
 
-        metodo_desc = "Gemini 2.5 Flash (IA Generativa)" if "2.5" in self.model else f"Gemini {self.model} (IA Generativa)"
+        # Formata descrição amigável do modelo
+        nome_amigavel = self.model.replace("gemini-", "Gemini ").replace("-", " ")
+        metodo_desc = f"{nome_amigavel} (IA Generativa)"
 
         return {
             "cor": cor,
