@@ -40,6 +40,9 @@ def test_fallback_classificacao_vermelho():
     casos = [
         "Paciente inconsciente e não respira",
         "Dor no peito intensa com suspeita de infarto",
+        "Tiro alojado no peito",
+        "Vítima de arma de fogo baleada",
+        "Esfaqueado com hemorragia maciça",
         "Parada cardiorrespiratória em curso",
         "Choque anafilático e asfixia",
         "Paciente em coma com cianose labial"

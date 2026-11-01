@@ -2,7 +2,18 @@ import os
 import json
 import re
 import unicodedata
+from pathlib import Path
 from typing import Dict, Any, Optional
+
+# Carrega variáveis de ambiente do arquivo .env da raiz do projeto automaticamente
+try:
+    from dotenv import load_dotenv
+    _raiz_projeto = Path(__file__).resolve().parent.parent.parent
+    _env_file = _raiz_projeto / ".env"
+    if _env_file.exists():
+        load_dotenv(dotenv_path=_env_file)
+except Exception:
+    pass
 
 # System Prompt Clínico que orienta o modelo de IA sobre o Protocolo de Manchester
 CLINICAL_SYSTEM_PROMPT = """Você é um médico regulador especialista em triagem hospitalar atuando sob as diretrizes estritas do Protocolo de Manchester.
@@ -10,11 +21,11 @@ Sua missão é analisar os sintomas clínicos relatados e a idade do paciente, d
 
 Categorias do Protocolo de Manchester:
 1. VERMELHO (Emergência imediata): Score 1, Tempo máximo de espera: 0 minutos.
-   - Indicadores: Risco iminente de morte, parada cardiorrespiratória, choque, dor torácica aguda com suspeita de infarto, inconsciência, asfixia, hemorragia exanguinante, convulsão ativa.
+   - Indicadores: Risco iminente de morte, parada cardiorrespiratória, choque, trauma penetrante (tiro, facada, perfuração de órgãos vitais), dor torácica aguda com suspeita de infarto, inconsciência, asfixia, hemorragia exanguinante, convulsão ativa.
 2. LARANJA (Muito Urgente): Score 2, Tempo máximo de espera: 10 minutos.
-   - Indicadores: Dor aguda intensa (EVA 8-10), alteração neurológica aguda (suspeita de AVC), dispneia/falta de ar importante, hemorragia maior incontrolada, queimaduras extensas, fraturas expostas.
+   - Indicadores: Dor aguda intensa (EVA 8-10), alteração neurológica aguda (suspeita de AVC), dispneia/falta de ar importante, hemorragia maior incontrolada, queimaduras extensas, fraturas expostas, intoxicações exógenas agudas.
 3. AMARELO (Urgente): Score 3, Tempo máximo de espera: 60 minutos.
-   - Indicadores: Dor moderada (EVA 4-7), febre alta persistente, vômitos/diarreia incoercíveis com risco de desidratação, dor abdominal aguda moderada, crise de asma leve a moderada.
+   - Indicadores: Dor moderada (EVA 4-7), febre alta persistente, vômitos/diarreia incoercíveis com risco de desidratação, dor abdominal aguda moderada, crise de asma leve a moderada, ferimentos profundos.
 4. VERDE (Pouco Urgente): Score 4, Tempo máximo de espera: 120 minutos.
    - Indicadores: Condições agudas de baixo risco, dor leve recente (EVA 1-3), sintomas respiratórios superiores (coriza, tosse sem dispneia), contusões leves, escoriações.
 5. AZUL (Não Urgente): Score 5, Tempo máximo de espera: 240 minutos.
@@ -177,28 +188,45 @@ Analise o quadro acima e determine a classificação estrita no Protocolo de Man
         """
         texto = self._normalizar_texto(sintomas)
 
-        # 1. Vermelho - Risco iminente de morte / Parada / Infarto / Asfixia / Choque
+        # 1. Vermelho - Risco iminente de morte / Parada / Infarto / Trauma Penetrante / Asfixia / Choque
         termos_vermelho = [
-            "dor no peito", "dor toracica", "infarto", "parada", "inconsciente",
-            "nao respira", "parou de respirar", "choque", "desmaiado", "desmaio",
-            "hemorragia grave", "hemorragia macica", "convulsao ativa", "convulsao",
-            "asfixia", "anafilaxia", "cianose", "coma", "sem pulso"
+            # Traumas graves e perfurantes (tiro, facada, armas, etc.)
+            "tiro", "baleado", "bala", "arma de fogo", "paf", "facada", "esfaqueado",
+            "arma branca", "alojado", "alojada", "perfuracao", "estilhaco", "evisceracao",
+            "amputacao", "politrauma", "atropelamento grave", "esmagamento",
+            # Parada, respiração e consciência
+            "dor no peito", "aperto no peito", "queimacao no peito", "dor toracica", "infarto",
+            "parada", "sem pulso", "inconsciente", "nao respira", "parou de respirar",
+            "dificuldade para respirar grave", "asfixia", "afogamento", "enforcamento",
+            "choque", "desmaiado", "desmaio", "coma", "cianose", "labios roxos",
+            # Hemorragias extremas e crises agudas
+            "hemorragia grave", "hemorragia macica", "sangrando muito", "esvaindo em sangue",
+            "hemorragia incontrolada", "convulsao ativa", "convulsao", "convulsionando",
+            "anafilaxia", "edema de glote", "glote fechando"
         ]
         if any(termo in texto for termo in termos_vermelho):
             return {
                 "cor": "VERMELHO",
                 "score": 1,
-                "justificativa": "Sintomas críticos indicativos de risco imediato à vida identificados pelo analisador clínico de emergência.",
+                "justificativa": "Emergência imediata com risco iminente à vida ou trauma penetrante crítico identificado pelo analisador clínico de emergência.",
                 "tempo_maximo_minutos": 0,
                 "metodo": "Fallback Clínico Heurístico (Offline)"
             }
 
         # 2. Laranja - Muito Urgente
         termos_laranja = [
-            "dor intensa", "fratura exposta", "queimadura grave", "falta de ar",
-            "dificuldade para respirar", "dispneia", "cefaleia subita", "avc",
-            "paralisia", "perda de forca", "sangramento ativo", "pressao 20",
-            "pressao alta severa", "febre em recem-nascido", "alteracao neurologica"
+            # Fraturas, queimaduras e sangramentos ativos
+            "fratura exposta", "osso exposto", "queimadura grave", "queimadura extensa",
+            "sangramento ativo", "hemorragia", "ferimento extenso",
+            # Respiratório e Neurológico
+            "falta de ar", "dificuldade para respirar", "dispneia", "sufocando",
+            "avc", "derrame", "perda de forca", "paralisia", "boca torta", "fala enrolada",
+            "cefaleia subita", "dor de cabeca explosiva", "alteracao neurologica",
+            # Hipertensão severa, intoxicações e dores intensas
+            "pressao 20", "pressao muito alta", "pressao alta severa", "crise hipertensiva",
+            "intoxicacao", "veneno", "overdose", "picada de cobra", "escorpiao",
+            "dor intensa", "dor insuportavel", "dor 10", "dor severa",
+            "febre em recem-nascido", "bebe com febre"
         ]
         if any(termo in texto for termo in termos_laranja):
             return {
@@ -211,9 +239,13 @@ Analise o quadro acima e determine a classificação estrita no Protocolo de Man
 
         # 3. Amarelo - Urgente
         termos_amarelo = [
-            "dor moderada", "febre alta", "vomito constante", "vomitos frequentes",
-            "diarreia aguda", "tontura forte", "colica renal", "crise de asma leve",
-            "ferimento profundo", "dor abdominal", "crise de ansiedade", "desidratacao"
+            "dor moderada", "febre alta", "39 graus", "40 graus", "febre persistente",
+            "vomito constante", "vomitos frequentes", "vomitando muito", "vomito", "vomitos",
+            "diarreia aguda", "diarreia intensa", "diarreia frequente",
+            "tontura forte", "vertigem", "colica renal", "pedra no rim",
+            "crise de asma", "chiado no peito", "ferimento profundo", "corte profundo",
+            "dor abdominal", "dor na barriga", "dor de estomago", "desidratacao",
+            "crise de ansiedade", "panico", "palpitacao"
         ]
         if any(termo in texto for termo in termos_amarelo):
             return {
@@ -226,8 +258,10 @@ Analise o quadro acima e determine a classificação estrita no Protocolo de Man
 
         # 4. Verde - Pouco Urgente
         termos_verde = [
-            "dor leve", "entorse", "resfriado", "tosse", "coriza", "garganta inflamada",
-            "escoriacao", "ralado", "arranhado", "unha encravada", "dor muscular", "azia"
+            "dor leve", "entorse", "torcao", "resfriado", "gripe", "tosse", "coriza",
+            "garganta inflamada", "dor de garganta", "escoriacao", "ralado", "arranhado",
+            "unha encravada", "pequeno corte", "corte superficial", "dor muscular",
+            "azia", "enjoo leve", "mal-estar leve"
         ]
         if any(termo in texto for termo in termos_verde):
             return {
