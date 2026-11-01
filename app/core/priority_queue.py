@@ -19,14 +19,10 @@ class ItemFila:
     @property
     def prioridade_chave(self) -> Tuple[int, int, float]:
         """
-        Retorna a tupla de comparação do Min-Heap:
+        Retorna a tupla de comparação do Min-Heap via método polimórfico do Paciente:
         (gravidade_score, peso_preferencial, timestamp)
         """
-        return (
-            self.triagem.grau_risco.score,
-            self.paciente.peso_prioridade_desempate(),
-            self.timestamp_entrada
-        )
+        return self.paciente.calcular_score_final(self.triagem)
 
     def __lt__(self, outro: "ItemFila") -> bool:
         return self.prioridade_chave < outro.prioridade_chave

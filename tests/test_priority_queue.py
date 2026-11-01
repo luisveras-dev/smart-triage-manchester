@@ -92,6 +92,13 @@ class PacienteFalso:
     def peso_prioridade_desempate(self) -> int:
         return 0 if self._preferencial else 1
 
+    def calcular_score_final(self, triagem: Triagem) -> tuple[int, int, float]:
+        return (
+            triagem.grau_risco.score,
+            self.peso_prioridade_desempate(),
+            triagem.criado_em.timestamp(),
+        )
+
 
 def criar(
     nome: str, grau: GrauRisco, preferencial: bool = False, minuto: int = 0
@@ -197,6 +204,12 @@ def test_listar_elementos_ordenado_e_sem_alterar_a_fila():
 
 # ---------- Propriedades do heap ----------
 def test_propriedade_do_heap_vale_apos_muitas_operacoes():
+    """
+    Validação da Invariante Estrutural do Min-Heap Binário:
+    Garante que para todo nó na posição 'pos' (exceto a raiz), seu pai
+    na posição '(pos - 1) // 2' possui prioridade menor ou igual (heap[(pos-1)//2] <= heap[pos]),
+    assegurando a corretude assintótica O(log n) das operações de sift-up e sift-down.
+    """
     sorteio = random.Random(42)
     graus = list(GrauRisco)
     fila = PriorityQueue()

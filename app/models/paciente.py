@@ -1,6 +1,9 @@
+from __future__ import annotations
 from datetime import datetime
-from typing import Optional, Tuple
-from app.models.triagem import Triagem
+from typing import Optional, Tuple, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.models.triagem import Triagem
 
 class Paciente:
     """
