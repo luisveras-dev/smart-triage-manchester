@@ -1,17 +1,58 @@
 import os
 import json
 import re
-from typing import Dict, Any
+import unicodedata
+from typing import Dict, Any, Optional
+
+# System Prompt Clínico que orienta o modelo de IA sobre o Protocolo de Manchester
+CLINICAL_SYSTEM_PROMPT = """Você é um médico regulador especialista em triagem hospitalar atuando sob as diretrizes estritas do Protocolo de Manchester.
+Sua missão é analisar os sintomas clínicos relatados e a idade do paciente, determinando o grau de risco e a prioridade de atendimento correspondente.
+
+Categorias do Protocolo de Manchester:
+1. VERMELHO (Emergência imediata): Score 1, Tempo máximo de espera: 0 minutos.
+   - Indicadores: Risco iminente de morte, parada cardiorrespiratória, choque, dor torácica aguda com suspeita de infarto, inconsciência, asfixia, hemorragia exanguinante, convulsão ativa.
+2. LARANJA (Muito Urgente): Score 2, Tempo máximo de espera: 10 minutos.
+   - Indicadores: Dor aguda intensa (EVA 8-10), alteração neurológica aguda (suspeita de AVC), dispneia/falta de ar importante, hemorragia maior incontrolada, queimaduras extensas, fraturas expostas.
+3. AMARELO (Urgente): Score 3, Tempo máximo de espera: 60 minutos.
+   - Indicadores: Dor moderada (EVA 4-7), febre alta persistente, vômitos/diarreia incoercíveis com risco de desidratação, dor abdominal aguda moderada, crise de asma leve a moderada.
+4. VERDE (Pouco Urgente): Score 4, Tempo máximo de espera: 120 minutos.
+   - Indicadores: Condições agudas de baixo risco, dor leve recente (EVA 1-3), sintomas respiratórios superiores (coriza, tosse sem dispneia), contusões leves, escoriações.
+5. AZUL (Não Urgente): Score 5, Tempo máximo de espera: 240 minutos.
+   - Indicadores: Queixas crônicas estáveis, troca de curativos, renovação de receitas, sintomas antigos sem agravamento agudo.
+
+Diretrizes Obrigatórias de Resposta:
+- Você deve responder ESTRITAMENTE em formato JSON válido (RFC 8259).
+- Não inclua explicações ou texto conversacional fora do bloco JSON.
+- O JSON deve conter EXATAMENTE as seguintes 4 chaves:
+{
+  "cor": "VERMELHO" | "LARANJA" | "AMARELO" | "VERDE" | "AZUL",
+  "score": 1 | 2 | 3 | 4 | 5,
+  "justificativa": "Justificativa clínica fundamentada e concisa em 1 ou 2 frases.",
+  "tempo_maximo_minutos": 0 | 10 | 60 | 120 | 240
+}
+"""
+
+# Mapeamento oficial de cores, scores e tempos de espera do Protocolo de Manchester
+MANCHESTER_SPECS = {
+    "VERMELHO": {"score": 1, "tempo_maximo_minutos": 0},
+    "LARANJA": {"score": 2, "tempo_maximo_minutos": 10},
+    "AMARELO": {"score": 3, "tempo_maximo_minutos": 60},
+    "VERDE": {"score": 4, "tempo_maximo_minutos": 120},
+    "AZUL": {"score": 5, "tempo_maximo_minutos": 240},
+}
 
 
 class AIService:
     """
     Serviço de Inteligência Artificial para classificação no Protocolo de Manchester.
-    Possui integração com Google Gemini API e Fallback Heurístico Clínico Offline.
+    Possui integração com Google Gemini API e Fallback Heurístico Clínico Offline de Alta Resiliência.
     """
-    def __init__(self, api_key: str = None):
+
+    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
         self.api_key = api_key or os.environ.get("GEMINI_API_KEY", "")
+        self.model = model or os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
         self.client = None
+
         if self.api_key:
             try:
                 from google import genai
@@ -24,73 +65,124 @@ class AIService:
         """
         Classifica os sintomas clínicos segundo as diretrizes de Manchester.
         Retorna dicionário padronizado com cor, score, justificativa e tempo_maximo_minutos.
+        Garante tolerância a falhas total: nunca lança exceção em caso de queda de API ou rede.
         """
         sintomas_limpos = (sintomas or "").strip()
         if not sintomas_limpos:
             return self._resultado_padrao_azul("Nenhum sintoma relevante relatado.")
 
-        # Tenta usar a API do Google Gemini se disponível
+        # Tenta classificar via API do Google Gemini se o cliente estiver configurado
         if self.client:
             try:
                 return self._classificar_com_gemini(sintomas_limpos, idade)
             except Exception as e:
                 print(f"[AIService] Erro na chamada da Gemini API ({e}). Ativando Fallback Heurístico...")
 
-        # Fallback Heurístico Clínico de Emergência
+        # Fallback Heurístico Clínico de Emergência (Offline / Blindagem total)
         return self._classificar_com_fallback(sintomas_limpos, idade)
 
     def _classificar_com_gemini(self, sintomas: str, idade: int) -> Dict[str, Any]:
-        prompt = f"""
-Você é um médico especialista em triagem hospitalar atuando sob o estrito Protocolo de Manchester.
-Analise a queixa e sintomas do paciente abaixo e classifique-o em uma das 5 categorias de Manchester:
-1. VERMELHO: Emergência imediata (Score 1, 0 min) - Risco iminente de morte, parada, choque, dor torácica aguda/infarto, inconsciência.
-2. LARANJA: Muito Urgente (Score 2, 10 min) - Dor severa aguda, alteração neurológica súbita, hemorragia maior, dispneia importante.
-3. AMARELO: Urgente (Score 3, 60 min) - Dor moderada, febre alta persistente, vômitos incoercíveis, desidratação leve a moderada.
-4. VERDE: Pouco Urgente (Score 4, 120 min) - Condições agudas de baixo risco, dor leve, sintomas respiratórios leves sem dispneia.
-5. AZUL: Não Urgente (Score 5, 240 min) - Queixas crônicas, troca de curativos, consultas de rotina.
-
-Dados do Paciente:
+        """
+        Executa a inferência clínica via Google Gemini API usando Structured JSON Output.
+        """
+        user_prompt = f"""Dados do Paciente:
 - Idade: {idade} anos
 - Queixa clínica / Sintomas: "{sintomas}"
 
-Responda OBRIGATORIAMENTE em JSON válido, com a seguinte estrutura:
-{{
-  "cor": "VERMELHO" | "LARANJA" | "AMARELO" | "VERDE" | "AZUL",
-  "score": 1 | 2 | 3 | 4 | 5,
-  "justificativa": "breve justificativa clínica médica fundamentada em 1 ou 2 frases",
-  "tempo_maximo_minutos": 0 | 10 | 60 | 120 | 240
-}}
-"""
-        response = self.client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt,
-        )
-        texto = response.text.strip()
-        # Limpa blocos markdown de json
-        match = re.search(r"\{.*\}", texto, re.DOTALL)
-        if match:
-            dados = json.loads(match.group(0))
-            return {
-                "cor": str(dados.get("cor", "AZUL")).upper(),
-                "score": int(dados.get("score", 5)),
-                "justificativa": str(dados.get("justificativa", "Análise realizada via Gemini IA.")),
-                "tempo_maximo_minutos": int(dados.get("tempo_maximo_minutos", 240)),
-                "metodo": "Gemini 2.5 Flash (IA Generativa)"
-            }
-        raise ValueError("Resposta da IA não contém JSON válido.")
+Analise o quadro acima e determine a classificação estrita no Protocolo de Manchester."""
+
+        # Configura prompt de sistema e formato JSON estrito
+        config = None
+        try:
+            from google.genai import types
+            config = types.GenerateContentConfig(
+                system_instruction=CLINICAL_SYSTEM_PROMPT,
+                response_mime_type="application/json",
+                temperature=0.1,
+            )
+        except Exception:
+            pass
+
+        # Monta chamada com ou sem o objeto de configuração do SDK
+        kwargs = {
+            "model": self.model,
+            "contents": f"{CLINICAL_SYSTEM_PROMPT}\n\n{user_prompt}" if config is None else user_prompt,
+        }
+        if config is not None:
+            kwargs["config"] = config
+
+        response = self.client.models.generate_content(**kwargs)
+        texto_resposta = getattr(response, "text", "") or ""
+        return self._parse_resposta_json(texto_resposta)
+
+    def _parse_resposta_json(self, texto: str) -> Dict[str, Any]:
+        """
+        Extrai e valida o JSON da resposta gerada pela IA.
+        Remove blocos de código Markdown (```json ... ```) se presentes
+        e garante a coerência dos campos segundo a especificação de Manchester.
+        """
+        texto_limpo = texto.strip()
+
+        # Remove formatação de bloco de código markdown caso o modelo tenha incluído
+        if texto_limpo.startswith("```"):
+            texto_limpo = re.sub(r"^```(?:json)?\s*", "", texto_limpo, flags=re.IGNORECASE)
+            texto_limpo = re.sub(r"\s*```$", "", texto_limpo)
+
+        match = re.search(r"\{.*\}", texto_limpo, re.DOTALL)
+        if not match:
+            raise ValueError(f"Resposta da IA não contém bloco JSON válido: '{texto[:100]}'")
+
+        dados = json.loads(match.group(0))
+
+        cor = str(dados.get("cor", "")).strip().upper()
+        if cor not in MANCHESTER_SPECS:
+            raise ValueError(f"Cor inválida retornada pela IA: '{cor}'")
+
+        specs = MANCHESTER_SPECS[cor]
+        score = int(dados.get("score", specs["score"]))
+        tempo = int(dados.get("tempo_maximo_minutos", specs["tempo_maximo_minutos"]))
+        justificativa = str(dados.get("justificativa", "Classificação clínica baseada no Protocolo de Manchester.")).strip()
+
+        # Garante consistência dos dados com o protocolo
+        if score != specs["score"]:
+            score = specs["score"]
+        if tempo != specs["tempo_maximo_minutos"]:
+            tempo = specs["tempo_maximo_minutos"]
+
+        metodo_desc = "Gemini 2.5 Flash (IA Generativa)" if "2.5" in self.model else f"Gemini {self.model} (IA Generativa)"
+
+        return {
+            "cor": cor,
+            "score": score,
+            "justificativa": justificativa,
+            "tempo_maximo_minutos": tempo,
+            "metodo": metodo_desc
+        }
+
+    @staticmethod
+    def _normalizar_texto(texto: str) -> str:
+        """
+        Remove acentos ortográficos e converte para minúsculas
+        para comparação léxica robusta e tolerante a variações do usuário.
+        """
+        normalizado = unicodedata.normalize("NFKD", texto or "")
+        sem_acentos = "".join(c for c in normalizado if not unicodedata.combining(c))
+        return sem_acentos.lower()
 
     def _classificar_com_fallback(self, sintomas: str, idade: int) -> Dict[str, Any]:
         """
-        Analisador Léxico-Clínico Heurístico.
-        Garante blindagem total durante apresentações presenciais sem internet.
+        Analisador Léxico-Clínico Heurístico Local.
+        Garante blindagem total da aplicação caso a API esteja indisponível, sem cota,
+        sem chave configurada ou em ambiente de apresentação presencial sem internet.
         """
-        texto = sintomas.lower()
+        texto = self._normalizar_texto(sintomas)
 
-        # 1. Vermelho - Risco de morte / Parada / Infarto / Asfixia
+        # 1. Vermelho - Risco iminente de morte / Parada / Infarto / Asfixia / Choque
         termos_vermelho = [
-            "dor no peito", "infarto", "parada", "inconsciente", "não respira",
-            "choque", "desmaiado", "hemorragia grave", "convulsão ativa", "asfixia",
-            "anafilaxia", "cianose", "coma"
+            "dor no peito", "dor toracica", "infarto", "parada", "inconsciente",
+            "nao respira", "parou de respirar", "choque", "desmaiado", "desmaio",
+            "hemorragia grave", "hemorragia macica", "convulsao ativa", "convulsao",
+            "asfixia", "anafilaxia", "cianose", "coma", "sem pulso"
         ]
         if any(termo in texto for termo in termos_vermelho):
             return {
@@ -104,8 +196,9 @@ Responda OBRIGATORIAMENTE em JSON válido, com a seguinte estrutura:
         # 2. Laranja - Muito Urgente
         termos_laranja = [
             "dor intensa", "fratura exposta", "queimadura grave", "falta de ar",
-            "dificuldade para respirar", "cefaleia súbita", "avc", "paralisia",
-            "perda de força", "sangramento ativo", "pressão 20", "febre em recém-nascido"
+            "dificuldade para respirar", "dispneia", "cefaleia subita", "avc",
+            "paralisia", "perda de forca", "sangramento ativo", "pressao 20",
+            "pressao alta severa", "febre em recem-nascido", "alteracao neurologica"
         ]
         if any(termo in texto for termo in termos_laranja):
             return {
@@ -118,9 +211,9 @@ Responda OBRIGATORIAMENTE em JSON válido, com a seguinte estrutura:
 
         # 3. Amarelo - Urgente
         termos_amarelo = [
-            "dor moderada", "febre alta", "vômito constante", "vômitos frequentes",
-            "diarreia aguda", "tontura forte", "cólica renal", "crise de asma leve",
-            "ferimento profundo", "dor abdominal", "crise de ansiedade"
+            "dor moderada", "febre alta", "vomito constante", "vomitos frequentes",
+            "diarreia aguda", "tontura forte", "colica renal", "crise de asma leve",
+            "ferimento profundo", "dor abdominal", "crise de ansiedade", "desidratacao"
         ]
         if any(termo in texto for termo in termos_amarelo):
             return {
@@ -134,7 +227,7 @@ Responda OBRIGATORIAMENTE em JSON válido, com a seguinte estrutura:
         # 4. Verde - Pouco Urgente
         termos_verde = [
             "dor leve", "entorse", "resfriado", "tosse", "coriza", "garganta inflamada",
-            "escoriação", "ralado", "unha encravada", "dor muscular", "azia"
+            "escoriacao", "ralado", "arranhado", "unha encravada", "dor muscular", "azia"
         ]
         if any(termo in texto for termo in termos_verde):
             return {
@@ -145,10 +238,11 @@ Responda OBRIGATORIAMENTE em JSON válido, com a seguinte estrutura:
                 "metodo": "Fallback Clínico Heurístico (Offline)"
             }
 
-        # 5. Azul - Não Urgente (Padrão)
+        # 5. Azul - Não Urgente (Padrão para queixas leves ou crônicas)
         return self._resultado_padrao_azul("Sintomas leves ou quadro crônico sem indícios de urgência imediata.")
 
     def _resultado_padrao_azul(self, justificativa: str) -> Dict[str, Any]:
+        """Gera resposta padronizada para classificação Azul."""
         return {
             "cor": "AZUL",
             "score": 5,
