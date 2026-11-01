@@ -2,6 +2,7 @@ import sqlite3
 import os
 from typing import List, Optional, Dict, Any
 from pathlib import Path
+from contextlib import contextmanager
 
 
 DB_PATH = os.environ.get("DATABASE_PATH", str(Path(__file__).parent.parent.parent / "hospital.db"))
@@ -17,11 +18,23 @@ class DatabaseManager:
         self.db_path = db_path
         self._inicializar_banco()
 
-    def _obter_conexao(self) -> sqlite3.Connection:
+    @contextmanager
+    def _obter_conexao(self):
+        """
+        Abre uma conexão e garante a transação:
+        commit se tudo deu certo, rollback se houve erro, e sempre fecha.
+        """
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON;")
-        return conn
+        try:
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
 
     def _inicializar_banco(self) -> None:
         """Cria as tabelas caso o banco ainda não exista."""
