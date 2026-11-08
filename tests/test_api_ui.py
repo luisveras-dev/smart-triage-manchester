@@ -60,7 +60,7 @@ def test_fluxo_completo_triagem_e_chamada(client):
 
     # 3. Chamar próximo
     resp_chamada = client.post("/api/chamar-proximo", data={
-        "medico_responsavel": "Dr. Sabatina",
+        "medico_responsavel": "Dr. Plantonista",
         "observacoes": "Encaminhado para ECG"
     })
     assert resp_chamada.status_code == 200

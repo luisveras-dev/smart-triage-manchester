@@ -175,8 +175,8 @@ Criar uma interface web moderna, visualmente atraente e intuitiva para o hospita
 - A tela atualiza a fila de pacientes sem necessidade de recarregar a página inteira.
 - O aluno responsável sabe explicar como a interface conversa com os endpoints da API."
 
-# Issue 6 - Documentação e Sabatina
-gh issue create --title "Issue #06: [DOCS] Testes End-to-End e Guia de Blindagem da Sabatina" \
+# Issue 6 - Documentação e Testes E2E
+gh issue create --title "Issue #06: [DOCS] Documentação de Arquitetura, Testes E2E e Evidências" \
 --label "pilar:ed,pilar:bd,pilar:crud,pilar:poo,pilar:ia" \
 --body "### Responsável: Todos os 5 Alunos
 **Branch recomendada:** \`docs/sabatina-defense-guide\`
